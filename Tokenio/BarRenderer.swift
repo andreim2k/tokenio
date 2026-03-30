@@ -57,7 +57,7 @@ func usageColor(usageFrac: Double, provider: String = "") -> NSColor {
     return NSColor(red: c.0, green: c.1, blue: c.2, alpha: c.3)
 }
 
-// MARK: - Popup: smooth capsule bar (iCloud / default)
+// MARK: - Popup: smooth capsule bar (neutral grey only)
 
 func drawBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
              corner: CGFloat, fillFrac: Double, tickFrac: Double,
@@ -73,7 +73,8 @@ func drawBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
     if fw > 0 {
         ctx.saveGraphicsState()
         trackPath.setClip()
-        usageColor(usageFrac: fillFrac, provider: provider).setFill()
+        // Neutral grey for popup (no red/orange/brand colors)
+        NSColor(white: 0.5, alpha: 0.8).setFill()
         NSRect(x: x, y: y, width: fw, height: h).fill()
         ctx.restoreGraphicsState()
     }
@@ -88,7 +89,8 @@ func drawSegmentedBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
     let gapW: CGFloat = 2.5
     let segW = (w - CGFloat(numSegments - 1) * gapW) / CGFloat(numSegments)
     let fw = max(0, min(CGFloat(fillFrac), 1.0)) * w
-    let fillColor = usageColor(usageFrac: fillFrac, provider: provider)
+    // Neutral grey for popup (no red/orange/brand colors)
+    let fillColor = NSColor(white: 0.5, alpha: 0.8)
 
     for i in 0..<numSegments {
         let segX = x + CGFloat(i) * (segW + gapW)
