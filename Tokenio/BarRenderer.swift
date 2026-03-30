@@ -23,8 +23,8 @@ private let vBarRightX: CGFloat = vBarLeftX + vBarW + vBarSpacing
 private let vBarCorner: CGFloat = 2.0
 
 // Popup menu bars
-let menuBarH: CGFloat = 7
-let menuBarCorner: CGFloat = 2.5  // = menuBarH/2: perfect pill for iCloud
+let menuBarH: CGFloat = 4
+let menuBarCorner: CGFloat = 2.0  // = menuBarH/2: perfect pill for iCloud
 
 // MARK: - Colors
 

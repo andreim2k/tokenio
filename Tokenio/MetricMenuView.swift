@@ -69,7 +69,7 @@ class MetricMenuView: NSView {
 
         let bx = menuPad
         let bw = menuW - 2 * menuPad
-        let by: CGFloat = 20
+        let by: CGFloat = 24
 
         drawBar(x: bx, y: by, w: bw, h: menuBarH,
                 corner: menuBarCorner, fillFrac: usageFrac, tickFrac: timeFrac,
