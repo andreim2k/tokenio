@@ -73,8 +73,16 @@ func drawBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
     if fw > 0 {
         ctx.saveGraphicsState()
         trackPath.setClip()
-        // Neutral grey for popup (no red/orange/brand colors)
-        NSColor(white: 0.5, alpha: 0.8).setFill()
+        // Color progression: green → yellow → red
+        let barColor: NSColor
+        if fillFrac >= 0.9 {
+            barColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0)  // red
+        } else if fillFrac >= 0.7 {
+            barColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0)  // yellow
+        } else {
+            barColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0)  // green
+        }
+        barColor.setFill()
         NSRect(x: x, y: y, width: fw, height: h).fill()
         ctx.restoreGraphicsState()
     }
@@ -89,8 +97,15 @@ func drawSegmentedBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
     let gapW: CGFloat = 2.5
     let segW = (w - CGFloat(numSegments - 1) * gapW) / CGFloat(numSegments)
     let fw = max(0, min(CGFloat(fillFrac), 1.0)) * w
-    // Neutral grey for popup (no red/orange/brand colors)
-    let fillColor = NSColor(white: 0.5, alpha: 0.8)
+    // Color progression: green → yellow → red
+    let fillColor: NSColor
+    if fillFrac >= 0.9 {
+        fillColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0)  // red
+    } else if fillFrac >= 0.7 {
+        fillColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0)  // yellow
+    } else {
+        fillColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0)  // green
+    }
 
     for i in 0..<numSegments {
         let segX = x + CGFloat(i) * (segW + gapW)
@@ -117,9 +132,9 @@ private func drawGmailIconBars(sUsage: Double, wUsage: Double, isDark: Bool) {
     guard let ctx = NSGraphicsContext.current else { return }
 
     func barFillColor(_ frac: Double) -> NSColor {
-        if frac >= 1.0 { return NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }
-        if frac >= 0.9 { return NSColor(red: 1.0, green: 0.45, blue: 0.10, alpha: 1.0) }
-        return NSColor(white: baseWhite, alpha: 0.82)
+        if frac >= 1.0 { return NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
+        if frac >= 0.9 { return NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
+        return NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0)  // green
     }
 
     func drawOneBar(x: CGFloat, fillFrac: Double) {
@@ -150,9 +165,9 @@ private func drawICloudIconBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
                                 bgAlpha: CGFloat, isDark: Bool) {
     let baseWhite: CGFloat = isDark ? 1.0 : 0.0
     let fillColor: NSColor
-    if fillFrac >= 1.0 { fillColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }
-    else if fillFrac >= 0.9 { fillColor = NSColor(red: 1.0, green: 0.45, blue: 0.10, alpha: 1.0) }
-    else { fillColor = NSColor(white: baseWhite, alpha: 0.82) }
+    if fillFrac >= 1.0 { fillColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
+    else if fillFrac >= 0.9 { fillColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
+    else { fillColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0) }  // green
 
     let trackPath = NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h),
                                   xRadius: corner, yRadius: corner)
