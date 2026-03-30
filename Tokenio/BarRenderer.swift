@@ -69,15 +69,6 @@ func drawBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
     NSColor(white: 1.0, alpha: bgAlpha).setFill()
     trackPath.fill()
 
-    let tickW = max(0, min(CGFloat(tickFrac), 1.0)) * w
-    if tickW > 0 {
-        ctx.saveGraphicsState()
-        trackPath.setClip()
-        NSColor(white: 1.0, alpha: bgAlpha * 2.5).setFill()
-        NSRect(x: x, y: y, width: tickW, height: h).fill()
-        ctx.restoreGraphicsState()
-    }
-
     let fw = max(0, min(CGFloat(fillFrac), 1.0)) * w
     if fw > 0 {
         ctx.saveGraphicsState()
