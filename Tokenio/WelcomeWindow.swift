@@ -38,7 +38,7 @@ class WelcomeWindow {
         content.addSubview(subtitle)
 
         // Hint
-        let hint = NSTextField(labelWithString: "Use \u{201c}Continue with email\u{201d} to log in.\nGoogle sign-in is not supported.")
+        let hint = NSTextField(labelWithString: "Sign in with Google, Apple, or email.\nLaunch multiple instances for different accounts.")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .tertiaryLabelColor
         hint.alignment = .center

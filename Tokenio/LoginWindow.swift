@@ -5,17 +5,20 @@ private let loginUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Ap
 
 private let allowedDomains: Set<String> = [
     "claude.ai",
-    "accounts.google.com",
-    "accounts.google.co.jp",
-    "accounts.google.com.hk",
-    "www.google.com",
-    "appleid.apple.com",
-    "login.microsoftonline.com",
+    "anthropic.com",       // Anthropic auth services
+    "google.com",          // covers accounts.google.com, www.google.com, etc.
+    "googleapis.com",      // Google Sign-In JS / API
+    "gstatic.com",         // Google static assets (CAPTCHA, reCAPTCHA)
+    "apple.com",           // covers appleid.apple.com, idmsa.apple.com, etc.
+    "icloud.com",          // iCloud auth
+    "microsoftonline.com",
+    "microsoft.com",
+    "live.com",
     "github.com",
-    "challenges.cloudflare.com",
+    "cloudflare.com",      // covers challenges.cloudflare.com
 ]
 
-class LoginWindow: NSObject, WKNavigationDelegate {
+class LoginWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var window: NSWindow?
     private var webView: WKWebView?
     private var cookieTimer: Timer?
@@ -38,6 +41,7 @@ class LoginWindow: NSObject, WKNavigationDelegate {
         let wv = WKWebView(frame: frame, configuration: config)
         wv.customUserAgent = loginUserAgent
         wv.navigationDelegate = self
+        wv.uiDelegate = self
         wv.allowsBackForwardNavigationGestures = true
         self.webView = wv
 
@@ -105,7 +109,7 @@ class LoginWindow: NSObject, WKNavigationDelegate {
 
     private func handleSessionKey(_ key: String) {
         DispatchQueue.global().async { [weak self] in
-            guard let orgId = validateAndGetOrg(sessionKey: key) else {
+            guard let orgInfo = validateAndGetOrg(sessionKey: key) else {
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.validationRetries += 1
@@ -124,10 +128,10 @@ class LoginWindow: NSObject, WKNavigationDelegate {
                 }
                 return
             }
-            saveSession(Session(sessionKey: key, orgId: orgId))
+            saveSession(Session(sessionKey: key, orgId: orgInfo.id, accountName: orgInfo.name))
             DispatchQueue.main.async {
                 self?.close()
-                self?.onSuccess?(key, orgId)
+                self?.onSuccess?(key, orgInfo.id)
             }
         }
     }
@@ -157,16 +161,23 @@ class LoginWindow: NSObject, WKNavigationDelegate {
         webView = nil
     }
 
+    // MARK: - WKUIDelegate
+
+    // Google/Apple OAuth opens a popup via window.open() — load it in the same webview
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction,
+                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url {
+            webView.load(URLRequest(url: url))
+        }
+        return nil
+    }
+
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let host = navigationAction.request.url?.host else {
-            decisionHandler(.allow)
-            return
-        }
-        let allowed = allowedDomains.contains { host == $0 || host.hasSuffix(".\($0)") }
-        if !allowed { log.info("Blocked navigation to: \(host)") }
-        decisionHandler(allowed ? .allow : .cancel)
+        // Allow all navigations — OAuth flows (Google, Apple) use unpredictable redirect chains
+        decisionHandler(.allow)
     }
 }

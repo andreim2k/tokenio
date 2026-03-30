@@ -25,10 +25,20 @@ enum UsageResult {
     case error(String)
 }
 
+struct OrgInfo {
+    let id: String
+    let name: String?
+}
+
 // MARK: - Keychain (Tokenio-owned)
 
 private let keychainService = "tokenio"
-private let keychainAccount = "session"
+var currentSlot: String? = nil
+
+private var effectiveKeychainAccount: String {
+    guard let slot = currentSlot, !slot.isEmpty else { return "session" }
+    return "session_\(slot)"
+}
 
 private func keychainSave(service: String, account: String, data: Data) -> Bool {
     keychainDelete(service: service, account: account)
@@ -69,33 +79,42 @@ private func keychainDelete(service: String, account: String) -> Bool {
 struct Session {
     let sessionKey: String
     let orgId: String
+    let accountName: String?
 }
 
 func loadSession() -> Session? {
-    guard let data = keychainLoad(service: keychainService, account: keychainAccount),
+    guard let data = keychainLoad(service: keychainService, account: effectiveKeychainAccount),
           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String],
           let key = dict["sessionKey"], let org = dict["orgId"]
     else { return nil }
-    return Session(sessionKey: key, orgId: org)
+    return Session(sessionKey: key, orgId: org, accountName: dict["accountName"])
 }
 
 func saveSession(_ session: Session) {
-    let dict: [String: String] = ["sessionKey": session.sessionKey, "orgId": session.orgId]
+    var dict: [String: String] = ["sessionKey": session.sessionKey, "orgId": session.orgId]
+    if let name = session.accountName { dict["accountName"] = name }
     if let data = try? JSONSerialization.data(withJSONObject: dict) {
-        if !keychainSave(service: keychainService, account: keychainAccount, data: data) {
+        if !keychainSave(service: keychainService, account: effectiveKeychainAccount, data: data) {
             log.error("Failed to save session to keychain")
         }
     }
 }
 
 func clearSession() {
-    keychainDelete(service: keychainService, account: keychainAccount)
+    keychainDelete(service: keychainService, account: effectiveKeychainAccount)
 }
 
 // MARK: - Usage snapshot persistence
 
-private let snapshotKey = "lastUsageSnapshot"
-private let snapshotTimeKey = "lastUsageSnapshotTime"
+private var effectiveSnapshotKey: String {
+    guard let slot = currentSlot, !slot.isEmpty else { return "lastUsageSnapshot" }
+    return "lastUsageSnapshot_\(slot)"
+}
+
+private var effectiveSnapshotTimeKey: String {
+    guard let slot = currentSlot, !slot.isEmpty else { return "lastUsageSnapshotTime" }
+    return "lastUsageSnapshotTime_\(slot)"
+}
 
 func saveSnapshot(_ data: UsageData) {
     let dict: [String: Any] = [
@@ -105,13 +124,13 @@ func saveSnapshot(_ data: UsageData) {
         "overagePct": data.overagePct, "overageReset": data.overageReset,
         "extraDollars": data.extraDollars, "extraEnabled": data.extraEnabled,
     ]
-    UserDefaults.standard.set(dict, forKey: snapshotKey)
-    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: snapshotTimeKey)
+    UserDefaults.standard.set(dict, forKey: effectiveSnapshotKey)
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: effectiveSnapshotTimeKey)
 }
 
 func loadSnapshot() -> (UsageData, TimeInterval)? {
-    guard let dict = UserDefaults.standard.dictionary(forKey: snapshotKey) else { return nil }
-    let ts = UserDefaults.standard.double(forKey: snapshotTimeKey)
+    guard let dict = UserDefaults.standard.dictionary(forKey: effectiveSnapshotKey) else { return nil }
+    let ts = UserDefaults.standard.double(forKey: effectiveSnapshotTimeKey)
     guard ts > 0 else { return nil }
     let data = UsageData(
         sessionPct: dict["sessionPct"] as? Double ?? 0,
@@ -129,8 +148,8 @@ func loadSnapshot() -> (UsageData, TimeInterval)? {
 }
 
 func clearSnapshot() {
-    UserDefaults.standard.removeObject(forKey: snapshotKey)
-    UserDefaults.standard.removeObject(forKey: snapshotTimeKey)
+    UserDefaults.standard.removeObject(forKey: effectiveSnapshotKey)
+    UserDefaults.standard.removeObject(forKey: effectiveSnapshotTimeKey)
 }
 
 // MARK: - API
@@ -214,13 +233,14 @@ private func apiRequestDict(path: String, sessionKey: String) -> ApiResult {
     }
 }
 
-func validateAndGetOrg(sessionKey: String) -> String? {
+func validateAndGetOrg(sessionKey: String) -> OrgInfo? {
     guard case .success(let json) = apiRequest(path: "/api/organizations", sessionKey: sessionKey),
           let arr = json as? [[String: Any]],
           let first = arr.first,
           let uuid = first["uuid"] as? String
     else { return nil }
-    return uuid
+    let name = (first["name"] as? String) ?? (first["email"] as? String)
+    return OrgInfo(id: uuid, name: name)
 }
 
 // MARK: - Fetch usage
@@ -347,3 +367,46 @@ func fmtReset(_ ts: TimeInterval) -> String {
     if h >= 24 { return "\(h / 24)d \(h % 24)h" }
     return h > 0 ? "\(h)h \(m)m" : "\(m)m"
 }
+
+func getEmailProvider(_ name: String) -> String {
+    let trimmed = name.trimmingCharacters(in: .whitespaces)
+    guard trimmed.contains("@") else { return "" }
+
+    let domain = trimmed.split(separator: "@").last.map(String.init) ?? ""
+
+    // Gmail providers
+    if domain.contains("gmail.com") || domain.contains("googlemail.com") {
+        return "gmail"
+    }
+
+    // iCloud providers
+    if domain.contains("icloud.com") || domain.contains("me.com") || domain.contains("mac.com") {
+        return "icloud"
+    }
+
+    return ""
+}
+
+func makeInitials(_ name: String) -> String {
+    let trimmed = name.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return "" }
+
+    // Email address: show symbol based on provider
+    if trimmed.contains("@") {
+        let provider = getEmailProvider(trimmed)
+
+        if provider == "gmail" {
+            return "✉"  // Envelope
+        } else if provider == "icloud" {
+            return "☁"  // Cloud (for iCloud)
+        }
+
+        // Default: show first letter of domain
+        let domain = trimmed.split(separator: "@").last.map(String.init) ?? ""
+        return domain.prefix(1).uppercased()
+    }
+
+    // For non-email names: first character
+    return String(trimmed.prefix(1)).uppercased()
+}
+

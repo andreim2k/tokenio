@@ -20,6 +20,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var loginItem: NSMenuItem!
     private var logoutItem: NSMenuItem!
     private var launchAtLoginItem: NSMenuItem!
+    private var accountItem: NSMenuItem!
+    private var launchInstanceItem: NSMenuItem!
 
     private var fetchTimer: Timer?
     private var uiTimer: Timer?
@@ -32,10 +34,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // Last known icon values for redraw on appearance change
     private var lastSU: Double = 0, lastST: Double = 0
     private var lastWU: Double = 0, lastWT: Double = 0
+    private var currentAccountName: String? = nil
 
     private let refreshInterval: TimeInterval = 300 // 5 min
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Multi-instance slot isolation
+        let env = ProcessInfo.processInfo.environment
+        if let slot = env["TOKENIO_SLOT"], !slot.isEmpty {
+            currentSlot = slot
+        }
+
         NSApp.setActivationPolicy(.accessory)
 
         // Enable launch at login on first run
@@ -48,14 +57,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         buildMenu()
 
-        if loadSession() != nil {
+        if let session = loadSession() {
             // Logged in — show snapshot immediately if available, then refresh
+            currentAccountName = session.accountName
+            updateProviderViews()
+            let initials = session.accountName.map { makeInitials($0) } ?? ""
+            applyInitials(initials, accountName: session.accountName)
+            updateAccountItem(name: session.accountName)
+
+            // If accountName missing from old session, re-fetch it in background
+            if session.accountName == nil {
+                DispatchQueue.global().async { [weak self] in
+                    if let orgInfo = validateAndGetOrg(sessionKey: session.sessionKey) {
+                        let updated = Session(sessionKey: session.sessionKey, orgId: session.orgId, accountName: orgInfo.name)
+                        saveSession(updated)
+                        DispatchQueue.main.async {
+                            self?.currentAccountName = orgInfo.name
+                            self?.updateProviderViews()
+                            self?.updateAccountItem(name: orgInfo.name)
+                        }
+                    }
+                }
+            }
             if let (snapshot, ts) = loadSnapshot() {
                 applySnapshot(snapshot)
                 lastFetched = ts
                 updatedItem.title = "Updated \(fmtAgo(ts))  \u{21bb}"
             } else {
-                applyIcon(makeIcon(sUsage: 0, sTime: 0, wUsage: 0, wTime: 0, isDark: isDarkMenuBar))
+                applyIcon(makeIcon(sUsage: 0, sTime: 0, wUsage: 0, wTime: 0, isDark: isDarkMenuBar, accountName: session.accountName))
             }
             triggerFetch(isBackground: true)
         } else {
@@ -98,6 +127,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
+        // Account label (shown when logged in)
+        accountItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        accountItem.isEnabled = true
+        menu.addItem(accountItem)
+
+        menu.addItem(.separator())
+
         func addMetric(_ view: MetricMenuView) {
             let item = NSMenuItem()
             item.view = view
@@ -128,6 +164,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         logoutItem.target = self
         menu.addItem(logoutItem)
 
+        launchInstanceItem = NSMenuItem(title: "Launch another instance\u{2026}", action: #selector(launchAnotherInstance), keyEquivalent: "")
+        launchInstanceItem.target = self
+        menu.addItem(launchInstanceItem)
+
         updateAuthVisibility()
 
         launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
@@ -157,6 +197,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyIcon(_ img: NSImage) {
         statusItem.button?.image = img
         statusItem.button?.imageScaling = .scaleProportionallyDown
+    }
+
+    private func applyInitials(_ initials: String, accountName: String? = nil) {
+        // Hide all text/icons - just show the progress bars
+        statusItem.button?.title = ""
+        statusItem.button?.image = nil
     }
 
     // MARK: - Fetch
@@ -210,7 +256,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         lastSU = sU; lastST = sT; lastWU = wU; lastWT = wT
         if iconOverride {
-            applyIcon(makeIcon(sUsage: sU, sTime: sT, wUsage: wU, wTime: wT, isDark: isDarkMenuBar))
+            applyIcon(makeIcon(sUsage: sU, sTime: sT, wUsage: wU, wTime: wT, isDark: isDarkMenuBar, accountName: currentAccountName))
         }
 
         let snU = d.sonnetPct
@@ -237,9 +283,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Auth visibility
 
     private func updateAuthVisibility() {
-        let loggedIn = loadSession() != nil
+        let session = loadSession()
+        let loggedIn = session != nil
         loginItem.isHidden = loggedIn
         logoutItem.isHidden = !loggedIn
+        updateAccountItem(name: session?.accountName)
+    }
+
+    private func updateProviderViews() {
+        let p = currentAccountName.map { getEmailProvider($0) } ?? ""
+        [sessionView, weeklyView, sonnetView, extraView].forEach { $0?.setProvider(p) }
+    }
+
+    private func updateAccountItem(name: String?) {
+        guard let name = name, !name.isEmpty else { accountItem.isHidden = true; return }
+
+        // Strip "'s Organization" suffix (Claude API returns this for personal accounts)
+        let displayName = name.hasSuffix("'s Organization")
+            ? String(name.dropLast("'s Organization".count)).trimmingCharacters(in: .whitespaces)
+            : name
+
+        let provider = getEmailProvider(displayName)
+        let brandColor: NSColor = provider == "gmail"
+            ? NSColor(red: 0.918, green: 0.263, blue: 0.208, alpha: 1.0)
+            : provider == "icloud"
+            ? NSColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1.0)
+            : NSColor.secondaryLabelColor
+
+        let badge = provider == "gmail" ? "Google  ·  " : provider == "icloud" ? "Apple  ·  " : ""
+        let attrs = NSMutableAttributedString()
+        if !badge.isEmpty {
+            attrs.append(NSAttributedString(string: badge, attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                .foregroundColor: brandColor
+            ]))
+        }
+        attrs.append(NSAttributedString(string: displayName, attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: brandColor.withAlphaComponent(0.70)
+        ]))
+
+        accountItem.attributedTitle = attrs
+        accountItem.isEnabled = true   // must be true or macOS overrides attributedTitle colors
+        accountItem.isHidden = false
     }
 
     // MARK: - Relative time
@@ -247,7 +333,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateRelativeTime() {
         guard lastFetched > 0, !authFailed else { return }
         updatedItem.title = "Updated \(fmtAgo(lastFetched))  \u{21bb}"
-        applyIcon(makeIcon(sUsage: lastSU, sTime: lastST, wUsage: lastWU, wTime: lastWT, isDark: isDarkMenuBar))
+        applyIcon(makeIcon(sUsage: lastSU, sTime: lastST, wUsage: lastWU, wTime: lastWT, isDark: isDarkMenuBar, accountName: currentAccountName))
     }
 
     // MARK: - Actions
@@ -266,11 +352,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func loginClicked() {
         loginWindow = LoginWindow(
-            onSuccess: { [weak self] sessionKey, orgId in
-                saveSession(Session(sessionKey: sessionKey, orgId: orgId))
+            onSuccess: { [weak self] _, _ in
+                // Session already saved by LoginWindow with accountName; just refresh UI
                 self?.authFailed = false
                 self?.loginWindow = nil
                 self?.updateAuthVisibility()
+                // Apply initials from the freshly saved session
+                if let session = loadSession() {
+                    self?.currentAccountName = session.accountName
+                    self?.updateProviderViews()
+                    let initials = session.accountName.map { makeInitials($0) } ?? ""
+                    self?.applyInitials(initials, accountName: session.accountName)
+                    self?.updateAccountItem(name: session.accountName)
+                }
                 self?.triggerFetch(isBackground: false)
             },
             onCancel: { [weak self] in
@@ -285,7 +379,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         clearSnapshot()
         authFailed = true
         lastFetched = 0
+        currentAccountName = nil
+        updateProviderViews()
         applyIcon(makeDisconnectedIcon())
+        applyInitials("")
+        updateAccountItem(name: nil)
         updatedItem.title = "Not logged in  \u{26a0}"
         sessionView.setData(value: "\u{2014}", usageFrac: 0, timeFrac: 0, resetStr: "\u{2014}")
         weeklyView.setData(value: "\u{2014}", usageFrac: 0, timeFrac: 0, resetStr: "\u{2014}")
@@ -300,16 +398,58 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
     }
 
+    @objc private func launchAnotherInstance() {
+        guard let execURL = Bundle.main.executableURL else { return }
+        let newSlot = String(UUID().uuidString.prefix(8))
+        var env = ProcessInfo.processInfo.environment
+        env["TOKENIO_SLOT"] = newSlot
+        let process = Process()
+        process.executableURL = execURL
+        process.environment = env
+        do {
+            try process.run()
+        } catch {
+            log.error("Failed to launch new instance: \(error.localizedDescription)")
+        }
+    }
+
     @objc private func aboutClicked() {
-        NSApp.orderFrontStandardAboutPanel(options: [
-            .credits: NSAttributedString(
-                string: "github.com/elomid/tokenio",
-                attributes: [
-                    .link: URL(string: "https://github.com/elomid/tokenio")!,
-                    .font: NSFont.systemFont(ofSize: 11),
-                ]
-            ),
-        ])
+        let credits = NSMutableAttributedString()
+
+        let body: (String, Bool) -> NSAttributedString = { text, bold in
+            NSAttributedString(string: text, attributes: [
+                .font: bold ? NSFont.systemFont(ofSize: 11, weight: .semibold) : NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.labelColor,
+            ])
+        }
+        let dim: (String) -> NSAttributedString = { text in
+            NSAttributedString(string: text, attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ])
+        }
+
+        credits.append(dim("Track your Claude.ai usage from the menu bar.\n\n"))
+
+        credits.append(body("Account icons\n", true))
+        credits.append(dim("Google accounts display as two "))
+        credits.append(body("vertical bars", false))
+        credits.append(dim(" (bar chart style).\nApple accounts display as two "))
+        credits.append(body("horizontal capsules", false))
+        credits.append(dim(" (pill style).\nBars turn orange at \u{2265}90% and red at 100%.\n\n"))
+
+        credits.append(body("Multiple accounts\n", true))
+        credits.append(dim("Use \u{201c}Launch another instance\u{2026}\u{201d} to monitor\na second Claude account simultaneously.\n\n"))
+
+        credits.append(body("Accessibility\n", true))
+        credits.append(dim("Tokenio runs as a menu bar app and does not\nappear in the Dock or App Switcher.\nIt requires no special system permissions.\n\n"))
+
+        credits.append(NSAttributedString(string: "github.com/elomid/tokenio", attributes: [
+            .link: URL(string: "https://github.com/elomid/tokenio")!,
+            .font: NSFont.systemFont(ofSize: 11),
+        ]))
+
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
         if #available(macOS 14.0, *) {
             NSApp.activate()
         } else {
