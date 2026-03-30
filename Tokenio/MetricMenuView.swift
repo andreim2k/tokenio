@@ -69,22 +69,15 @@ class MetricMenuView: NSView {
 
         let bx = menuPad
         let bw = menuW - 2 * menuPad
-        let by: CGFloat = 22
+        let by: CGFloat = 20
 
-        // Gmail → 5-segment discrete bar; iCloud/default → smooth capsule bar
-        if provider == "gmail" {
-            drawSegmentedBar(x: bx, y: by, w: bw, h: menuBarH,
-                             fillFrac: usageFrac, bgAlpha: 0.10,
-                             provider: provider, numSegments: 5)
-        } else {
-            drawBar(x: bx, y: by, w: bw, h: menuBarH,
-                    corner: menuBarCorner, fillFrac: usageFrac, tickFrac: timeFrac,
-                    bgAlpha: 0.10, provider: provider)
-        }
+        drawBar(x: bx, y: by, w: bw, h: menuBarH,
+                corner: menuBarCorner, fillFrac: usageFrac, tickFrac: timeFrac,
+                bgAlpha: 0.10, provider: provider)
 
         let resetStr = NSAttributedString(string: resetText, attributes: [
             .font: fReset, .foregroundColor: cTert
         ])
-        resetStr.draw(at: NSPoint(x: menuPad, y: 31))
+        resetStr.draw(at: NSPoint(x: menuPad, y: 33))
     }
 }

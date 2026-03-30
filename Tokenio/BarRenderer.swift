@@ -5,14 +5,13 @@ import AppKit
 private let iconW: CGFloat = 36
 private let iconH: CGFloat = 22
 
-// iCloud icon: 2 horizontal capsule bars
 private let barW: CGFloat = 31
-private let barH: CGFloat = 5
+private let barH: CGFloat = 6
 private let barX0: CGFloat = (iconW - barW) / 2
-private let sessionY: CGFloat = 14
-private let weeklyY: CGFloat = 4
-private let barCorner: CGFloat = 2.5   // = barH/2: perfect pill
-private let iconBgAlpha: CGFloat = 0.22
+private let sessionY: CGFloat = 13
+private let weeklyY: CGFloat = 3
+private let barCorner: CGFloat = 2.5
+private let iconBgAlpha: CGFloat = 0.35
 
 // Gmail icon: 2 vertical bars (bar chart style)
 private let vBarW: CGFloat = 12
@@ -24,8 +23,8 @@ private let vBarRightX: CGFloat = vBarLeftX + vBarW + vBarSpacing
 private let vBarCorner: CGFloat = 2.0
 
 // Popup menu bars
-let menuBarH: CGFloat = 3
-let menuBarCorner: CGFloat = 1.5  // = menuBarH/2: perfect pill for iCloud
+let menuBarH: CGFloat = 7
+let menuBarCorner: CGFloat = 2.5  // = menuBarH/2: perfect pill for iCloud
 
 // MARK: - Colors
 
@@ -191,20 +190,13 @@ private func drawICloudIconBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
 
 func makeIcon(sUsage: Double, sTime: Double, wUsage: Double, wTime: Double,
               isDark: Bool = true, accountName: String? = nil) -> NSImage {
-    let provider = accountName.map { getEmailProvider($0) } ?? ""
     let img = NSImage(size: NSSize(width: iconW, height: iconH), flipped: false) { _ in
-        if provider == "gmail" {
-            // Gmail: vertical bar chart
-            drawGmailIconBars(sUsage: sUsage / 100, wUsage: wUsage / 100, isDark: isDark)
-        } else {
-            // iCloud / default: horizontal capsule bars
-            drawICloudIconBar(x: barX0, y: sessionY, w: barW, h: barH,
-                              corner: barCorner, fillFrac: sUsage / 100, tickFrac: sTime / 100,
-                              bgAlpha: iconBgAlpha, isDark: isDark)
-            drawICloudIconBar(x: barX0, y: weeklyY, w: barW, h: barH,
-                              corner: barCorner, fillFrac: wUsage / 100, tickFrac: wTime / 100,
-                              bgAlpha: iconBgAlpha, isDark: isDark)
-        }
+        drawICloudIconBar(x: barX0, y: sessionY, w: barW, h: barH,
+                          corner: barCorner, fillFrac: sUsage / 100, tickFrac: sTime / 100,
+                          bgAlpha: iconBgAlpha, isDark: isDark)
+        drawICloudIconBar(x: barX0, y: weeklyY, w: barW, h: barH,
+                          corner: barCorner, fillFrac: wUsage / 100, tickFrac: wTime / 100,
+                          bgAlpha: iconBgAlpha, isDark: isDark)
         return true
     }
     img.isTemplate = false
