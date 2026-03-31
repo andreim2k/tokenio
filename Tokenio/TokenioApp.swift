@@ -170,6 +170,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        // Auth actions
         loginItem = NSMenuItem(title: "Log in to Claude\u{2026}", action: #selector(loginClicked), keyEquivalent: "")
         loginItem.target = self
         menu.addItem(loginItem)
@@ -184,6 +185,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         updateAuthVisibility()
 
+        menu.addItem(.separator())
+
+        // Settings
         launchAtLoginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
         launchAtLoginItem.target = self
         launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
@@ -201,11 +205,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         refreshParent.submenu = refreshMenu
         menu.addItem(refreshParent)
 
+        menu.addItem(.separator())
+
+        // About + Quit
         let aboutItem = NSMenuItem(title: "About Tokenio", action: #selector(aboutClicked), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
-
-        menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit Tokenio", action: #selector(quitClicked), keyEquivalent: "q")
         quitItem.target = self
