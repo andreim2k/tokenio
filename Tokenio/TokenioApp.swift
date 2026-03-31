@@ -32,11 +32,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var welcomeWindow: WelcomeWindow?
 
     // Last known icon values for redraw on appearance change
-    private var lastSU: Double = 0, lastST: Double = 0
-    private var lastWU: Double = 0, lastWT: Double = 0
+    private var lastSU: Double = 0, lastWU: Double = 0
+    private var lastSR: TimeInterval = 0, lastWR: TimeInterval = 0   // reset timestamps
+
+    // Tick fracs computed live from reset timestamps so they update every 30s
+    private var lastST: Double { elapsedPct(resetTs: lastSR, windowSecs: 5 * 3600) }
+    private var lastWT: Double { elapsedPct(resetTs: lastWR, windowSecs: 7 * 24 * 3600) }
     private var currentAccountName: String? = nil
 
-    private let refreshInterval: TimeInterval = 300 // 5 min
+    private let refreshIntervalOptions: [(label: String, seconds: TimeInterval)] = [
+        ("1 minute",   60),
+        ("2 minutes",  120),
+        ("5 minutes",  300),
+        ("10 minutes", 600),
+        ("30 minutes", 1800),
+    ]
+    private var refreshInterval: TimeInterval {
+        let saved = UserDefaults.standard.double(forKey: "refreshInterval")
+        return saved > 0 ? saved : 300
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Multi-instance slot isolation
@@ -175,6 +189,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         launchAtLoginItem.state = LaunchAtLogin.isEnabled ? .on : .off
         menu.addItem(launchAtLoginItem)
 
+        let refreshMenu = NSMenu()
+        for opt in refreshIntervalOptions {
+            let item = NSMenuItem(title: opt.label, action: #selector(setRefreshInterval(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = opt.seconds
+            item.state = (opt.seconds == refreshInterval) ? .on : .off
+            refreshMenu.addItem(item)
+        }
+        let refreshParent = NSMenuItem(title: "Refresh every\u{2026}", action: nil, keyEquivalent: "")
+        refreshParent.submenu = refreshMenu
+        menu.addItem(refreshParent)
+
         let aboutItem = NSMenuItem(title: "About Tokenio", action: #selector(aboutClicked), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
@@ -254,7 +280,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let wR = d.weeklyReset
         let wT = elapsedPct(resetTs: wR, windowSecs: 7 * 24 * 3600)
 
-        lastSU = sU; lastST = sT; lastWU = wU; lastWT = wT
+        lastSU = sU; lastSR = sR; lastWU = wU; lastWR = wR
         if iconOverride {
             applyIcon(makeIcon(sUsage: sU, sTime: sT, wUsage: wU, wTime: wT, isDark: isDarkMenuBar, accountName: currentAccountName))
         }
@@ -339,6 +365,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Actions
 
     @objc private func refreshClicked() { triggerFetch(isBackground: false) }
+
+    @objc private func setRefreshInterval(_ sender: NSMenuItem) {
+        guard let seconds = sender.representedObject as? TimeInterval else { return }
+        UserDefaults.standard.set(seconds, forKey: "refreshInterval")
+        // Update checkmarks
+        sender.menu?.items.forEach { $0.state = ($0.representedObject as? TimeInterval == seconds) ? .on : .off }
+        // Restart timer with new interval
+        fetchTimer?.invalidate()
+        fetchTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: true) { [weak self] _ in
+            self?.triggerFetch(isBackground: true)
+        }
+        RunLoop.main.add(fetchTimer!, forMode: .common)
+    }
 
     @objc private func wakeRefresh() { triggerFetch(isBackground: true) }
 
