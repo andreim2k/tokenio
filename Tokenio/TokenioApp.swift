@@ -115,7 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             updateAuthVisibility()
             // Show welcome window on first launch
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.showWelcome()
+                self?.loginClicked()
             }
         }
 

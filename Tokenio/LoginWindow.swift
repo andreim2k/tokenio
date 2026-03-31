@@ -79,6 +79,7 @@ class LoginWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
             NSApp.mainMenu?.addItem(editMenuItem)
         }
 
+        win.level = .floating
         win.makeKeyAndOrderFront(nil)
         if #available(macOS 14.0, *) {
             NSApp.activate()
