@@ -30,6 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var authFailed = false
     private var loginWindow: LoginWindow?
     private var welcomeWindow: WelcomeWindow?
+    private var aboutWindow: NSWindow?
 
     // Last known icon values for redraw on appearance change
     private var lastSU: Double = 0, lastWU: Double = 0
@@ -458,47 +459,131 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func aboutClicked() {
-        let credits = NSMutableAttributedString()
+        if let win = aboutWindow { win.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
 
-        let body: (String, Bool) -> NSAttributedString = { text, bold in
-            NSAttributedString(string: text, attributes: [
-                .font: bold ? NSFont.systemFont(ofSize: 11, weight: .semibold) : NSFont.systemFont(ofSize: 11),
-                .foregroundColor: NSColor.labelColor,
-            ])
+        let w: CGFloat = 340
+        let pad: CGFloat = 28
+
+        let root = NSStackView()
+        root.orientation = .vertical
+        root.alignment = .centerX
+        root.spacing = 0
+        root.edgeInsets = NSEdgeInsets(top: pad, left: pad, bottom: pad, right: pad)
+        root.translatesAutoresizingMaskIntoConstraints = false
+
+        // Icon
+        let iconView = NSImageView()
+        iconView.image = NSApp.applicationIconImage
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        iconView.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        iconView.heightAnchor.constraint(equalToConstant: 72).isActive = true
+        root.addArrangedSubview(iconView)
+        root.setCustomSpacing(12, after: iconView)
+
+        // App name
+        let nameLabel = NSTextField(labelWithString: "Tokenio")
+        nameLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        nameLabel.alignment = .center
+        root.addArrangedSubview(nameLabel)
+        root.setCustomSpacing(4, after: nameLabel)
+
+        // Version
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let buildNum = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        let verLabel = NSTextField(labelWithString: "Version \(version) (\(buildNum))")
+        verLabel.font = .systemFont(ofSize: 11)
+        verLabel.textColor = .tertiaryLabelColor
+        verLabel.alignment = .center
+        root.addArrangedSubview(verLabel)
+        root.setCustomSpacing(20, after: verLabel)
+
+        // Divider
+        let div = NSBox(); div.boxType = .separator
+        div.widthAnchor.constraint(equalToConstant: w - pad * 2).isActive = true
+        root.addArrangedSubview(div)
+        root.setCustomSpacing(20, after: div)
+
+        func section(_ heading: String, _ body: String) {
+            let stack = NSStackView()
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.spacing = 3
+            stack.widthAnchor.constraint(equalToConstant: w - pad * 2).isActive = true
+
+            let h = NSTextField(labelWithString: heading)
+            h.font = .systemFont(ofSize: 11, weight: .semibold)
+            h.textColor = .labelColor
+            stack.addArrangedSubview(h)
+
+            let b = NSTextField(wrappingLabelWithString: body)
+            b.font = .systemFont(ofSize: 11)
+            b.textColor = .secondaryLabelColor
+            b.preferredMaxLayoutWidth = w - pad * 2
+            stack.addArrangedSubview(b)
+
+            root.addArrangedSubview(stack)
+            root.setCustomSpacing(16, after: stack)
         }
-        let dim: (String) -> NSAttributedString = { text in
-            NSAttributedString(string: text, attributes: [
-                .font: NSFont.systemFont(ofSize: 11),
-                .foregroundColor: NSColor.secondaryLabelColor,
-            ])
+
+        section("Usage Bars",
+            "Bars fill green below 70%, yellow from 70–90%, and red above 90%.")
+        section("Split Bar Design",
+            "Each bar splits at the current time position within the window. The left pill shows elapsed time, the right shows remaining. If the fill overflows the gap, you're using quota faster than pace.")
+        section("Multiple Accounts",
+            "Use \u{201c}Launch another instance\u{2026}\u{201d} to monitor a second Claude account simultaneously.")
+        section("Accessibility",
+            "Tokenio lives in the menu bar only — no Dock icon, no App Switcher. No special system permissions required.")
+
+        // GitHub link
+        let link = NSButton(title: "github.com/elomid/tokenio", target: self, action: #selector(openGitHub))
+        link.bezelStyle = .inline
+        link.isBordered = false
+        link.font = .systemFont(ofSize: 11)
+        link.contentTintColor = NSColor.linkColor
+        root.addArrangedSubview(link)
+        root.setCustomSpacing(20, after: link)
+
+        // Close button
+        let closeBtn = NSButton(title: "Close", target: self, action: #selector(closeAbout))
+        closeBtn.bezelStyle = .rounded
+        closeBtn.keyEquivalent = "\u{1b}"
+        root.addArrangedSubview(closeBtn)
+
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: w, height: 100))
+        contentView.addSubview(root)
+        NSLayoutConstraint.activate([
+            root.topAnchor.constraint(equalTo: contentView.topAnchor),
+            root.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            root.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            root.widthAnchor.constraint(equalToConstant: w),
+        ])
+
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: w, height: 500),
+                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        win.title = "About Tokenio"
+        win.contentView = contentView
+        win.isReleasedWhenClosed = false
+        win.level = .floating
+        contentView.layoutSubtreeIfNeeded()
+        let fittingH = root.fittingSize.height
+        win.setContentSize(NSSize(width: w, height: fittingH))
+        win.center()
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: win, queue: .main) { [weak self] _ in
+            self?.aboutWindow = nil
         }
+        aboutWindow = win
+        win.makeKeyAndOrderFront(nil)
+        if #available(macOS 14.0, *) { NSApp.activate() } else { NSApp.activate(ignoringOtherApps: true) }
+    }
 
-        credits.append(dim("Track your Claude.ai usage from the menu bar.\n\n"))
+    @objc private func openGitHub() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/elomid/tokenio")!)
+    }
 
-        credits.append(body("Account icons\n", true))
-        credits.append(dim("Google accounts display as two "))
-        credits.append(body("vertical bars", false))
-        credits.append(dim(" (bar chart style).\nApple accounts display as two "))
-        credits.append(body("horizontal capsules", false))
-        credits.append(dim(" (pill style).\nBars turn orange at \u{2265}90% and red at 100%.\n\n"))
-
-        credits.append(body("Multiple accounts\n", true))
-        credits.append(dim("Use \u{201c}Launch another instance\u{2026}\u{201d} to monitor\na second Claude account simultaneously.\n\n"))
-
-        credits.append(body("Accessibility\n", true))
-        credits.append(dim("Tokenio runs as a menu bar app and does not\nappear in the Dock or App Switcher.\nIt requires no special system permissions.\n\n"))
-
-        credits.append(NSAttributedString(string: "github.com/elomid/tokenio", attributes: [
-            .link: URL(string: "https://github.com/elomid/tokenio")!,
-            .font: NSFont.systemFont(ofSize: 11),
-        ]))
-
-        NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+    @objc private func closeAbout() {
+        aboutWindow?.close()
+        aboutWindow = nil
     }
 
     @objc private func quitClicked() { NSApp.terminate(nil) }
