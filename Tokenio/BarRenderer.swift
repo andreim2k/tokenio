@@ -57,33 +57,53 @@ func usageColor(usageFrac: Double, provider: String = "") -> NSColor {
     return NSColor(red: c.0, green: c.1, blue: c.2, alpha: c.3)
 }
 
-// MARK: - Popup: smooth capsule bar (neutral grey only)
+// MARK: - Popup: split-pill bar (left = elapsed, right = remaining)
 
 func drawBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
              corner: CGFloat, fillFrac: Double, tickFrac: Double,
              bgAlpha: CGFloat, provider: String = "") {
-    let trackPath = NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h),
-                                  xRadius: corner, yRadius: corner)
     guard let ctx = NSGraphicsContext.current else { return }
 
-    NSColor(white: 1.0, alpha: bgAlpha).setFill()
-    trackPath.fill()
+    // Split point — clamp so both pills are always visible (min 4px each)
+    let gap: CGFloat = 3.0
+    let minW: CGFloat = 4.0
+    let splitX = max(minW, min(CGFloat(tickFrac) * w, w - minW - gap))
+    let leftW  = splitX
+    let rightX = x + splitX + gap
+    let rightW = w - splitX - gap
 
-    let fw = max(0, min(CGFloat(fillFrac), 1.0)) * w
-    if fw > 0 {
+    let leftPath  = NSBezierPath(roundedRect: NSRect(x: x,      y: y, width: leftW,  height: h), xRadius: corner, yRadius: corner)
+    let rightPath = NSBezierPath(roundedRect: NSRect(x: rightX, y: y, width: rightW, height: h), xRadius: corner, yRadius: corner)
+
+    // Tracks
+    NSColor(white: 1.0, alpha: bgAlpha).setFill()
+    leftPath.fill()
+    rightPath.fill()
+
+    // Color: green → yellow → red
+    let barColor: NSColor
+    if fillFrac >= 0.9      { barColor = NSColor(red: 1.0,  green: 0.25, blue: 0.20, alpha: 1.0) }
+    else if fillFrac >= 0.7 { barColor = NSColor(red: 1.0,  green: 0.75, blue: 0.10, alpha: 1.0) }
+    else                    { barColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0) }
+
+    // Fill spans across both pills (gap is transparent space)
+    let totalFill = max(0, min(CGFloat(fillFrac), 1.0)) * w
+
+    let leftFill = min(totalFill, leftW)
+    if leftFill > 0 {
         ctx.saveGraphicsState()
-        trackPath.setClip()
-        // Color progression: green → yellow → red
-        let barColor: NSColor
-        if fillFrac >= 0.9 {
-            barColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0)  // red
-        } else if fillFrac >= 0.7 {
-            barColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0)  // yellow
-        } else {
-            barColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0)  // green
-        }
+        leftPath.setClip()
         barColor.setFill()
-        NSRect(x: x, y: y, width: fw, height: h).fill()
+        NSRect(x: x, y: y, width: leftFill, height: h).fill()
+        ctx.restoreGraphicsState()
+    }
+
+    let rightFill = totalFill - leftW - gap
+    if rightFill > 0 {
+        ctx.saveGraphicsState()
+        rightPath.setClip()
+        barColor.setFill()
+        NSRect(x: rightX, y: y, width: rightFill, height: h).fill()
         ctx.restoreGraphicsState()
     }
 }
@@ -165,33 +185,46 @@ private func drawICloudIconBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
                                 bgAlpha: CGFloat, isDark: Bool) {
     let baseWhite: CGFloat = isDark ? 1.0 : 0.0
     let fillColor: NSColor
-    if fillFrac >= 0.9 { fillColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
-    else if fillFrac >= 0.7 { fillColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
-    else { fillColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0) }  // green
+    if fillFrac >= 0.9      { fillColor = NSColor(red: 1.0,  green: 0.25, blue: 0.20, alpha: 1.0) }
+    else if fillFrac >= 0.7 { fillColor = NSColor(red: 1.0,  green: 0.75, blue: 0.10, alpha: 1.0) }
+    else                    { fillColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0) }
 
-    let trackPath = NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h),
-                                  xRadius: corner, yRadius: corner)
     guard let ctx = NSGraphicsContext.current else { return }
 
-    NSColor(white: baseWhite, alpha: bgAlpha).setFill()
-    trackPath.fill()
+    // Split into two pills at tick position
+    let gap: CGFloat = 2.0
+    let minW: CGFloat = 3.0
+    let splitX = max(minW, min(CGFloat(tickFrac) * w, w - minW - gap))
+    let leftW  = splitX
+    let rightX = x + splitX + gap
+    let rightW = w - splitX - gap
 
-    let fw = max(0, min(CGFloat(fillFrac), 1.0)) * w
-    if fw > 0 {
+    let leftPath  = NSBezierPath(roundedRect: NSRect(x: x,      y: y, width: leftW,  height: h), xRadius: corner, yRadius: corner)
+    let rightPath = NSBezierPath(roundedRect: NSRect(x: rightX, y: y, width: rightW, height: h), xRadius: corner, yRadius: corner)
+
+    NSColor(white: baseWhite, alpha: bgAlpha).setFill()
+    leftPath.fill()
+    rightPath.fill()
+
+    let totalFill = max(0, min(CGFloat(fillFrac), 1.0)) * w
+
+    let leftFill = min(totalFill, leftW)
+    if leftFill > 0 {
         ctx.saveGraphicsState()
-        trackPath.setClip()
+        leftPath.setClip()
         fillColor.setFill()
-        NSRect(x: x, y: y, width: fw, height: h).fill()
+        NSRect(x: x, y: y, width: leftFill, height: h).fill()
         ctx.restoreGraphicsState()
     }
 
-    // Soft tick marker
-    let tx = x + CGFloat(tickFrac) * w
-    ctx.saveGraphicsState()
-    trackPath.setClip()
-    NSColor(white: baseWhite, alpha: 0.45).setFill()
-    NSRect(x: tx - 0.75, y: y, width: 1.5, height: h).fill()
-    ctx.restoreGraphicsState()
+    let rightFill = totalFill - leftW - gap
+    if rightFill > 0 {
+        ctx.saveGraphicsState()
+        rightPath.setClip()
+        fillColor.setFill()
+        NSRect(x: rightX, y: y, width: rightFill, height: h).fill()
+        ctx.restoreGraphicsState()
+    }
 }
 
 // MARK: - Icon factory
