@@ -34,7 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Last known icon values for redraw on appearance change
     private var lastSU: Double = 0, lastWU: Double = 0
-    private var lastSR: TimeInterval = 0, lastWR: TimeInterval = 0   // reset timestamps
+    private var lastSR: TimeInterval = 0, lastWR: TimeInterval = 0, lastSnR: TimeInterval = 0   // reset timestamps
 
     // Tick fracs computed live from reset timestamps so they update every 30s
     private var lastST: Double { elapsedPct(resetTs: lastSR, windowSecs: 5 * 3600) }
@@ -287,17 +287,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let wT = elapsedPct(resetTs: wR, windowSecs: 7 * 24 * 3600)
 
         lastSU = sU; lastSR = sR; lastWU = wU; lastWR = wR
-        if iconOverride {
-            applyIcon(makeIcon(sUsage: sU, sTime: sT, wUsage: wU, wTime: wT, isDark: isDarkMenuBar, accountName: currentAccountName))
-        }
 
         let snU = d.sonnetPct
         let snR = d.sonnetReset
         let snT = elapsedPct(resetTs: snR, windowSecs: 7 * 24 * 3600)
 
-        sessionView.setData(value: "\(Int(sU))%", usageFrac: sU / 100, timeFrac: sT / 100, resetStr: "Resets in \(fmtReset(sR))")
-        weeklyView.setData(value: "\(Int(wU))%", usageFrac: wU / 100, timeFrac: wT / 100, resetStr: "Resets in \(fmtReset(wR))")
-        sonnetView.setData(value: "\(Int(snU))%", usageFrac: snU / 100, timeFrac: snT / 100, resetStr: "Resets in \(fmtReset(snR))")
+        lastSnR = snR
+        if iconOverride {
+            applyIcon(makeIcon(sUsage: sU, sTime: sT, wUsage: wU, wTime: wT, isDark: isDarkMenuBar, accountName: currentAccountName))
+        }
+
+        sessionView.setData(value: "\(Int(sU))%", usageFrac: sU / 100, timeFrac: sT / 100, resetStr: sR == 0 ? "" : "Resets in \(fmtReset(sR))")
+        weeklyView.setData(value: "\(Int(wU))%", usageFrac: wU / 100, timeFrac: wT / 100, resetStr: wR == 0 ? "" : "Resets in \(fmtReset(wR))")
+        sonnetView.setData(value: "\(Int(snU))%", usageFrac: snU / 100, timeFrac: snT / 100, resetStr: snR == 0 ? "" : "Resets in \(fmtReset(snR))")
 
         if d.extraEnabled {
             let oU = d.overagePct
