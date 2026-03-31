@@ -132,8 +132,8 @@ private func drawGmailIconBars(sUsage: Double, wUsage: Double, isDark: Bool) {
     guard let ctx = NSGraphicsContext.current else { return }
 
     func barFillColor(_ frac: Double) -> NSColor {
-        if frac >= 1.0 { return NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
-        if frac >= 0.9 { return NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
+        if frac >= 0.9 { return NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
+        if frac >= 0.7 { return NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
         return NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0)  // green
     }
 
@@ -165,8 +165,8 @@ private func drawICloudIconBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
                                 bgAlpha: CGFloat, isDark: Bool) {
     let baseWhite: CGFloat = isDark ? 1.0 : 0.0
     let fillColor: NSColor
-    if fillFrac >= 1.0 { fillColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
-    else if fillFrac >= 0.9 { fillColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
+    if fillFrac >= 0.9 { fillColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
+    else if fillFrac >= 0.7 { fillColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
     else { fillColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0) }  // green
 
     let trackPath = NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: h),
