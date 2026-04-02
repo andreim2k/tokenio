@@ -11,11 +11,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         app.run()
     }
 
+    private let menuMaxWidth: CGFloat = 260
+    private let menuPad: CGFloat = 8
+
     private var statusItem: NSStatusItem!
     private var sessionView: MetricMenuView!
     private var weeklyView: MetricMenuView!
     private var sonnetView: MetricMenuView!
-    private var extraView: MetricMenuView!
+    private var overageView: MetricMenuView!
+    private var sessionMenuItem: NSMenuItem!
+    private var sonnetMenuItem: NSMenuItem!
+    private var overageMenuItem: NSMenuItem!
     private var updatedItem: NSMenuItem!
     private var loginItem: NSMenuItem!
     private var logoutItem: NSMenuItem!
@@ -138,6 +144,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Menu
 
+    private func makeWrappedMenuItem(title: String, action: Selector?, target: AnyObject?) -> NSMenuItem {
+        let item = NSMenuItem()
+
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: menuMaxWidth, height: 20))
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.widthAnchor.constraint(equalToConstant: menuMaxWidth).isActive = true
+
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: menuMaxWidth, height: 20))
+        button.bezelStyle = .inline
+        button.title = title
+        button.target = target
+        button.action = action
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.widthAnchor.constraint(equalToConstant: menuMaxWidth).isActive = true
+
+        view.addSubview(button)
+        item.view = view
+        return item
+    }
+
     private func buildMenu() {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -149,27 +175,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
-        func addMetric(_ view: MetricMenuView) {
+        @discardableResult
+        func addMetric(_ view: MetricMenuView) -> NSMenuItem {
             let item = NSMenuItem()
             item.view = view
             menu.addItem(item)
+            return item
         }
 
         sessionView = MetricMenuView(title: "Current session")
         weeklyView = MetricMenuView(title: "Weekly - All models")
         sonnetView = MetricMenuView(title: "Weekly - Sonnet only")
-        extraView = MetricMenuView(title: "Extra usage")
-
-        addMetric(sessionView)
+        overageView = MetricMenuView(title: "Overage cap")
+        sessionMenuItem = addMetric(sessionView)
         addMetric(weeklyView)
-        addMetric(sonnetView)
-        addMetric(extraView)
+        sonnetMenuItem = addMetric(sonnetView)
+        overageMenuItem = addMetric(overageView)
 
         updatedItem = NSMenuItem(title: "Refreshing\u{2026}  \u{21bb}", action: #selector(refreshClicked), keyEquivalent: "")
         updatedItem.target = self
         menu.addItem(updatedItem)
 
         menu.addItem(.separator())
+
+        // Overage cap (hidden by default, shown when enabled)
+        overageMenuItem.isHidden = true
 
         // Auth actions
         loginItem = NSMenuItem(title: "Log in to Claude\u{2026}", action: #selector(loginClicked), keyEquivalent: "")
@@ -293,25 +323,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let snT = elapsedPct(resetTs: snR, windowSecs: 7 * 24 * 3600)
 
         lastSnR = snR
+
+        // Overage cap
+        let ovU = d.overagePct
+        let ovR = d.overageReset
+        let ovT = elapsedPct(resetTs: ovR, windowSecs: 30 * 24 * 3600)
+        let ovEnabled = d.extraEnabled
+        overageMenuItem.isHidden = !ovEnabled
+
         if iconOverride {
-            applyIcon(makeIcon(sUsage: sU, sTime: sT, wUsage: wU, wTime: wT, isDark: isDarkMenuBar, accountName: currentAccountName))
+            applyIcon(makeIcon(sUsage: sU, sTime: sT, wUsage: wU, wTime: wT,
+                               sHasData: sR != 0, isDark: isDarkMenuBar, accountName: currentAccountName))
         }
 
-        sessionView.setData(value: "\(Int(sU))%", usageFrac: sU / 100, timeFrac: sT / 100, resetStr: sR == 0 ? "" : "Resets in \(fmtReset(sR))")
+        // Debug: log session reset value
+        print("Session reset: \(sR), Sonnet reset: \(snR), Overage enabled: \(ovEnabled), Overage pct: \(ovU)")
+        sessionMenuItem.isHidden = sR == 0
+        sonnetMenuItem.isHidden = snR == 0
+
+        sessionView.setData(value: "\(Int(sU))%", usageFrac: sU / 100, timeFrac: sT / 100, resetStr: "Resets in \(fmtReset(sR))")
         weeklyView.setData(value: "\(Int(wU))%", usageFrac: wU / 100, timeFrac: wT / 100, resetStr: wR == 0 ? "" : "Resets in \(fmtReset(wR))")
-        sonnetView.setData(value: "\(Int(snU))%", usageFrac: snU / 100, timeFrac: snT / 100, resetStr: snR == 0 ? "" : "Resets in \(fmtReset(snR))")
+        sonnetView.setData(value: "\(Int(snU))%", usageFrac: snU / 100, timeFrac: snT / 100, resetStr: "Resets in \(fmtReset(snR))")
 
-        if d.extraEnabled {
-            let oU = d.overagePct
-            let oR = d.overageReset
-            let daysInMonth = Double(Calendar.current.range(of: .day, in: .month, for: Date())?.count ?? 30)
-            let oT = elapsedPct(resetTs: oR, windowSecs: daysInMonth * 24 * 3600)
-            extraView.setTitle("Extra usage", suffix: "$\(String(format: "%.2f", d.extraDollars))")
-            extraView.setData(value: "\(Int(oU))%", usageFrac: oU / 100, timeFrac: oT / 100, resetStr: "Resets in \(fmtReset(oR))")
-        } else {
-            extraView.setTitle("Extra usage")
-            extraView.setData(value: "Not enabled", usageFrac: 0, timeFrac: 0, resetStr: "")
+        if ovEnabled {
+            let spentStr = d.extraDollars > 0 ? "(\(String(format: "$%.2f", d.extraDollars)) spent)" : ""
+            overageView.setData(value: "\(Int(ovU))%", usageFrac: ovU / 100, timeFrac: ovT / 100,
+                                resetStr: "Resets in \(fmtReset(ovR))  \(spentStr)")
         }
+
+        // Debug: always show session row for testing
+        // sessionMenuItem.isHidden = false
     }
 
     // MARK: - Auth visibility
@@ -326,7 +367,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateProviderViews() {
         let p = currentAccountName.map { getEmailProvider($0) } ?? ""
-        [sessionView, weeklyView, sonnetView, extraView].forEach { $0?.setProvider(p) }
+        [sessionView, weeklyView, sonnetView].forEach { $0?.setProvider(p) }
     }
 
     private func updateAccountItem(name: String?) {
@@ -367,7 +408,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateRelativeTime() {
         guard lastFetched > 0, !authFailed else { return }
         updatedItem.title = "Updated \(fmtAgo(lastFetched))  \u{21bb}"
-        applyIcon(makeIcon(sUsage: lastSU, sTime: lastST, wUsage: lastWU, wTime: lastWT, isDark: isDarkMenuBar, accountName: currentAccountName))
+        applyIcon(makeIcon(sUsage: lastSU, sTime: lastST, wUsage: lastWU, wTime: lastWT,
+                           sHasData: lastSR != 0, isDark: isDarkMenuBar, accountName: currentAccountName))
     }
 
     // MARK: - Actions
@@ -435,8 +477,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sessionView.setData(value: "\u{2014}", usageFrac: 0, timeFrac: 0, resetStr: "\u{2014}")
         weeklyView.setData(value: "\u{2014}", usageFrac: 0, timeFrac: 0, resetStr: "\u{2014}")
         sonnetView.setData(value: "\u{2014}", usageFrac: 0, timeFrac: 0, resetStr: "\u{2014}")
-        extraView.setTitle("Extra usage")
-        extraView.setData(value: "\u{2014}", usageFrac: 0, timeFrac: 0, resetStr: "\u{2014}")
+        overageView.setData(value: "\u{2014}", usageFrac: 0, timeFrac: 0, resetStr: "\u{2014}")
+        overageMenuItem.isHidden = true
         updateAuthVisibility()
     }
 

@@ -28,33 +28,51 @@ let menuBarCorner: CGFloat = 2.0  // = menuBarH/2: perfect pill for iCloud
 
 // MARK: - Colors
 
-private let colorNormal: (CGFloat, CGFloat, CGFloat, CGFloat) = (0.18, 0.82, 0.30, 1.0)
-private let colorWarn:   (CGFloat, CGFloat, CGFloat, CGFloat) = (1.0,  0.45, 0.10, 1.0)
-private let colorCrit:   (CGFloat, CGFloat, CGFloat, CGFloat) = (1.0,  0.25, 0.20, 1.0)
-private let colorGmail:  (CGFloat, CGFloat, CGFloat, CGFloat) = (0.918, 0.263, 0.208, 1.0)
-private let colorICloud: (CGFloat, CGFloat, CGFloat, CGFloat) = (0.0,   0.478, 1.0,   1.0)
+private typealias RGBA = (CGFloat, CGFloat, CGFloat, CGFloat)
 
-private func lerp(_ a: (CGFloat, CGFloat, CGFloat, CGFloat),
-                  _ b: (CGFloat, CGFloat, CGFloat, CGFloat),
-                  _ t: CGFloat) -> (CGFloat, CGFloat, CGFloat, CGFloat) {
-    let t = max(0, min(1, t))
-    return (a.0+(b.0-a.0)*t, a.1+(b.1-a.1)*t, a.2+(b.2-a.2)*t, a.3+(b.3-a.3)*t)
-}
+// Generic fallback
+private let colorNormal: RGBA = (0.18, 0.82, 0.30, 1.0)
+private let colorWarn:   RGBA = (1.0,  0.45, 0.10, 1.0)
+private let colorCrit:   RGBA = (1.0,  0.25, 0.20, 1.0)
 
-private func providerNormal(_ provider: String) -> (CGFloat, CGFloat, CGFloat, CGFloat) {
+// Apple system colors (vibrant)
+private let colorICloudNormal: RGBA = (0.10,  0.90,  0.22,  1.0)  // Apple green vibrant
+private let colorICloudWarn:   RGBA = (1.0,   0.62,  0.0,   1.0)  // Apple orange vibrant
+private let colorICloudCrit:   RGBA = (1.0,   0.15,  0.10,  1.0)  // Apple red vibrant
+
+// Google brand colors
+private let colorGmailNormal: RGBA = (0.204, 0.659, 0.325, 1.0)  // Google green
+private let colorGmailWarn:   RGBA = (0.984, 0.737, 0.020, 1.0)  // Google yellow
+private let colorGmailCrit:   RGBA = (0.918, 0.263, 0.208, 1.0)  // Google red
+
+private func providerColor(usageFrac: Double, provider: String) -> RGBA {
     switch provider {
-    case "gmail":  return colorGmail
-    case "icloud": return colorICloud
-    default:       return colorNormal
+    case "icloud":
+        if usageFrac >= 0.9 { return colorICloudCrit }
+        if usageFrac >= 0.7 { return colorICloudWarn }
+        return colorICloudNormal
+    case "gmail":
+        if usageFrac >= 0.9 { return colorGmailCrit }
+        if usageFrac >= 0.7 { return colorGmailWarn }
+        return colorGmailNormal
+    default:
+        if usageFrac >= 0.9 { return colorCrit }
+        if usageFrac >= 0.7 { return colorWarn }
+        return colorNormal
     }
 }
 
 func usageColor(usageFrac: Double, provider: String = "") -> NSColor {
-    let c: (CGFloat, CGFloat, CGFloat, CGFloat)
-    if usageFrac >= 1.0 { c = colorCrit }
-    else if usageFrac >= 0.9 { c = lerp(colorWarn, colorCrit, (usageFrac - 0.9) / 0.1) }
-    else { c = providerNormal(provider) }
+    let c = providerColor(usageFrac: usageFrac, provider: provider)
     return NSColor(red: c.0, green: c.1, blue: c.2, alpha: c.3)
+}
+
+private func providerNormal(_ provider: String) -> RGBA {
+    switch provider {
+    case "gmail":  return colorGmailNormal
+    case "icloud": return colorICloudNormal
+    default:       return colorNormal
+    }
 }
 
 // MARK: - Popup: split-pill bar (left = elapsed, right = remaining)
@@ -80,11 +98,8 @@ func drawBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
     leftPath.fill()
     rightPath.fill()
 
-    // Color: green → yellow → red
-    let barColor: NSColor
-    if fillFrac >= 0.9      { barColor = NSColor(red: 1.0,  green: 0.25, blue: 0.20, alpha: 1.0) }
-    else if fillFrac >= 0.7 { barColor = NSColor(red: 1.0,  green: 0.75, blue: 0.10, alpha: 1.0) }
-    else                    { barColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0) }
+    let c = providerColor(usageFrac: fillFrac, provider: provider)
+    let barColor = NSColor(red: c.0, green: c.1, blue: c.2, alpha: c.3)
 
     // Fill spans across both pills (gap is transparent space)
     let totalFill = max(0, min(CGFloat(fillFrac), 1.0)) * w
@@ -117,15 +132,8 @@ func drawSegmentedBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
     let gapW: CGFloat = 2.5
     let segW = (w - CGFloat(numSegments - 1) * gapW) / CGFloat(numSegments)
     let fw = max(0, min(CGFloat(fillFrac), 1.0)) * w
-    // Color progression: green → yellow → red
-    let fillColor: NSColor
-    if fillFrac >= 0.9 {
-        fillColor = NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0)  // red
-    } else if fillFrac >= 0.7 {
-        fillColor = NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0)  // yellow
-    } else {
-        fillColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0)  // green
-    }
+    let fc = providerColor(usageFrac: fillFrac, provider: provider)
+    let fillColor = NSColor(red: fc.0, green: fc.1, blue: fc.2, alpha: fc.3)
 
     for i in 0..<numSegments {
         let segX = x + CGFloat(i) * (segW + gapW)
@@ -152,9 +160,8 @@ private func drawGmailIconBars(sUsage: Double, wUsage: Double, isDark: Bool) {
     guard let ctx = NSGraphicsContext.current else { return }
 
     func barFillColor(_ frac: Double) -> NSColor {
-        if frac >= 0.9 { return NSColor(red: 1.0, green: 0.25, blue: 0.20, alpha: 1.0) }  // red
-        if frac >= 0.7 { return NSColor(red: 1.0, green: 0.75, blue: 0.10, alpha: 1.0) }  // yellow
-        return NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0)  // green
+        let c = providerColor(usageFrac: frac, provider: "gmail")
+        return NSColor(red: c.0, green: c.1, blue: c.2, alpha: c.3)
     }
 
     func drawOneBar(x: CGFloat, fillFrac: Double) {
@@ -182,12 +189,10 @@ private func drawGmailIconBars(sUsage: Double, wUsage: Double, isDark: Bool) {
 
 private func drawICloudIconBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
                                 corner: CGFloat, fillFrac: Double, tickFrac: Double,
-                                bgAlpha: CGFloat, isDark: Bool) {
+                                bgAlpha: CGFloat, isDark: Bool, provider: String = "") {
     let baseWhite: CGFloat = isDark ? 1.0 : 0.0
-    let fillColor: NSColor
-    if fillFrac >= 0.9      { fillColor = NSColor(red: 1.0,  green: 0.25, blue: 0.20, alpha: 1.0) }
-    else if fillFrac >= 0.7 { fillColor = NSColor(red: 1.0,  green: 0.75, blue: 0.10, alpha: 1.0) }
-    else                    { fillColor = NSColor(red: 0.18, green: 0.82, blue: 0.30, alpha: 1.0) }
+    let c = providerColor(usageFrac: fillFrac, provider: provider)
+    let fillColor = NSColor(red: c.0, green: c.1, blue: c.2, alpha: c.3)
 
     guard let ctx = NSGraphicsContext.current else { return }
 
@@ -229,15 +234,28 @@ private func drawICloudIconBar(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat,
 
 // MARK: - Icon factory
 
+private func drawNoDataDash(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat, isDark: Bool) {
+    let baseWhite: CGFloat = isDark ? 1.0 : 0.0
+    let dashH: CGFloat = 1.0
+    let dashY = y + (h - dashH) / 2
+    NSColor(white: baseWhite, alpha: iconBgAlpha).setFill()
+    NSRect(x: x + w * 0.15, y: dashY, width: w * 0.7, height: dashH).fill()
+}
+
 func makeIcon(sUsage: Double, sTime: Double, wUsage: Double, wTime: Double,
-              isDark: Bool = true, accountName: String? = nil) -> NSImage {
+              sHasData: Bool = true, isDark: Bool = true, accountName: String? = nil) -> NSImage {
+    let provider = accountName.map { getEmailProvider($0) } ?? ""
     let img = NSImage(size: NSSize(width: iconW, height: iconH), flipped: false) { _ in
-        drawICloudIconBar(x: barX0, y: sessionY, w: barW, h: barH,
-                          corner: barCorner, fillFrac: sUsage / 100, tickFrac: sTime / 100,
-                          bgAlpha: iconBgAlpha, isDark: isDark)
+        if sHasData {
+            drawICloudIconBar(x: barX0, y: sessionY, w: barW, h: barH,
+                              corner: barCorner, fillFrac: sUsage / 100, tickFrac: sTime / 100,
+                              bgAlpha: iconBgAlpha, isDark: isDark, provider: provider)
+        } else {
+            drawNoDataDash(x: barX0, y: sessionY, w: barW, h: barH, isDark: isDark)
+        }
         drawICloudIconBar(x: barX0, y: weeklyY, w: barW, h: barH,
                           corner: barCorner, fillFrac: wUsage / 100, tickFrac: wTime / 100,
-                          bgAlpha: iconBgAlpha, isDark: isDark)
+                          bgAlpha: iconBgAlpha, isDark: isDark, provider: provider)
         return true
     }
     img.isTemplate = false
