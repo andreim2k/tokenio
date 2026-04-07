@@ -262,9 +262,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyInitials(_ initials: String, accountName: String? = nil) {
-        // Hide all text/icons - just show the progress bars
+        // Only clear image when showing progress bars (logged in with data)
+        // When logging out (empty initials), keep the warning icon
+        if !initials.isEmpty {
+            statusItem.button?.image = nil
+        }
         statusItem.button?.title = ""
-        statusItem.button?.image = nil
     }
 
     // MARK: - Fetch
